@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Nifty Bot Dashboard V2</title>
+
+  <!-- IMPORTANT: defer keeps execution after HTML is parsed -->
+  <script src="/socket.io/socket.io.js" defer></script>
+
+  <link rel="stylesheet" href="/vendor/tabulator/tabulator_midnight.min.css">
+  <script src="/vendor/tabulator/tabulator.min.js" defer></script>
+
+  <!-- your app logic -->
+  <script src="/app.js" defer></script>
+
+  <style>
+  :root{
+    --bg:#050b1a;
+    --panel:#020617;
+    --panel2:#0b1220;
+    --border:#111827;
+    --border2:#334155;
+    --text:#e5e7eb;
+    --muted:#9ca3af;
+    --accent:#2563eb;
+    --warn:#fbbf24;
+    --danger:#ef4444;
+  }
+
+  *{box-sizing:border-box}
+
+  html, body { height: 100%; }
+
+  body{
+    margin:0;
+    font-family:system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+    background:var(--bg);
+    color:var(--text);
+    overflow:hidden; /* lock page scroll - right panel will scroll */
+  }
+
+  .hidden{display:none !important;}
+
+  /* ---------- Layout ---------- */
+  .shell{
+    height:100vh;
+    display:grid;
+    grid-template-columns:260px 1fr;
+  }
+
+  /* LEFT */
+  .sidebar{
+    height:100vh;
+    overflow:auto;
+    border-right:1px solid var(--border);
+    background:linear-gradient(180deg, #050b1a 0%, #030816 100%);
+    padding:14px 12px;
+  }
+
+  .brand{
+    font-weight:700;
+    letter-spacing:0.2px;
+    margin-bottom:10px;
+  }
+
+  .groupTitle{
+    margin:14px 8px 8px;
+    color:var(--muted);
+    font-size:12px;
+    text-transform:uppercase;
+    letter-spacing:0.12em;
+  }
+
+  .cmdBtn{
+    width:100%;
+    text-align:left;
+    padding:10px 12px;
+    margin:6px 0;
+    border-radius:14px;
+    border:1px solid var(--border2);
+    background:var(--panel2);
+    color:var(--text);
+    cursor:pointer;
+    transition:transform .04s ease;
+  }
+  .cmdBtn:active{ transform: translateY(1px); }
+  .cmdBtn.primary{ border-color:#1d4ed8; }
+  .cmdBtn.danger{
+    border-color:#7f1d1d;
+    background:#19070a;
+    color:#fecaca;
+  }
+
+  /* Selected (force override even for primary/danger) */
+  .cmdBtn.active{
+    background: rgba(37,99,235,.25) !important;
+    border-color:#1d4ed8 !important;
+  }
+
+  /* RIGHT */
+  .main{
+    height:100vh;
+    overflow:hidden;
+    display:flex;
+    flex-direction:column;
+    min-width:0;
+  }
+
+  /* Top bar */
+  .topbar{
+    padding:12px 14px;
+    border-bottom:1px solid var(--border);
+    display:flex;
+    align-items:center;
+    gap:10px;
+    min-height:56px;
+
+    position:sticky;
+    top:0;
+    z-index:50;
+    background: rgba(5,11,26,.92);
+    backdrop-filter: blur(6px);
+  }
+
+  .running{
+    font-size:13px;
+    color:var(--muted);
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    max-width:45%;
+  }
+  #runningTitle{
+    color:var(--text);
+    font-weight:600;
+    margin-left:6px;
+  }
+
+  .btn{
+    padding:8px 12px;
+    border-radius:999px;
+    border:1px solid var(--border2);
+    background:var(--panel2);
+    color:var(--text);
+    cursor:pointer;
+    white-space:nowrap;
+  }
+  .btn.active{
+    background:var(--accent);
+    border-color:#1d4ed8;
+  }
+  .btn.danger{
+    background:#22070a;
+    border-color:#7f1d1d;
+    color:#fecaca;
+  }
+
+  #status{
+    margin-left:auto;
+    color:var(--warn);
+    font-weight:600;
+  }
+
+  /* Scroll area (right panel only) */
+  .content{
+    flex:1;
+    min-height:0;
+    overflow:auto;
+    padding:14px;
+  }
+
+  /* Log */
+  #log{
+    background:var(--panel);
+    border:1px solid var(--border);
+    border-radius:14px;
+    padding:12px;
+
+    /* Make log usable and keep your appendLog autoscroll working */
+    height: calc(100vh - 56px - 28px); /* topbar - content padding */
+    overflow:auto;
+
+    white-space:pre;
+    font-family:Consolas, ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size:12px;
+    color:var(--text);
+  }
+
+  /* Table view */
+  #intradayWrap{
+    border:1px solid var(--border);
+    border-radius:14px;
+    background:var(--panel);
+    overflow:hidden;
+  }
+
+  #tablePlaceholder{
+    border:1px dashed var(--border2);
+    border-radius:14px;
+    padding:14px;
+    color:var(--muted);
+    background:rgba(2,6,23,.3);
+  }
+/* Force dark background on all main containers */
+.shell, .main, .content, #logView, #tableView {
+  background: var(--bg);
+  color: var(--text);
+}
+
+/* Remove default pre margin (can create odd light gaps) */
+pre { margin: 0; }
+
+
+</style>
+
+</head>
+
+<body>
+  <div class="shell">
+
+    <!-- LEFT: Buttons -->
+    <aside class="sidebar">
+      <div class="brand">Nifty Bot Dashboard V2</div>
+
+      <div class="groupTitle">Daily / Weekly</div>
+      <button class="cmdBtn" data-cmd="daily">Run: Daily Strategy Bot</button>
+      <button class="cmdBtn" data-cmd="weekly">Run: Weekly Strategy Bot</button>
+      <button class="cmdBtn" data-cmd="tomorrow">Run: Tomorrow Predictions</button>
+
+      <div class="groupTitle">Option Buying</div>
+      <button class="cmdBtn primary" data-cmd="morning">Run: 4A Morning Pipeline</button>
+      <button class="cmdBtn" data-cmd="universe">Run: Rebuild LIVE_UNIVERSE</button>
+      <button class="cmdBtn" data-cmd="eod30">Run: EOD 30m Report</button>
+
+      <div class="groupTitle">Intraday</div>
+      <button class="cmdBtn primary" data-cmd="live">Start Live Scanner</button>
+      <button class="cmdBtn danger" id="btnStopLive">Stop Live Scanner</button>
+
+      <div class="groupTitle">Option Selling</div>
+      <button class="cmdBtn" data-cmd="opt_off">Run: Option Selling OFFLINE</button>
+      <button class="cmdBtn primary" data-cmd="live_eod">Start Live (EOD Parity)</button>
+
+      <div class="groupTitle">Notes</div>
+      <div style="color:var(--muted); font-size:12px; padding:0 8px 10px;">
+        Tip: Open two tabs: <b>?view=log</b> and <b>?view=table</b>
+      </div>
+    </aside>
+
+    <!-- RIGHT: Log/Table -->
+    <main class="main">
+      <div class="topbar">
+        <div class="running">
+          Running: <span id="runningTitle">Idle</span>
+        </div>
+
+        <button id="btnViewLog" class="btn active">Log Screen</button>
+        <button id="btnViewTable" class="btn">Table Screen</button>
+
+        <button id="btnClearLog" class="btn">Clear Log</button>
+        <button id="btnClearTable" class="btn">Clear Table</button>
+
+        <div id="status">Idle.</div>
+      </div>
+
+      <div class="content">
+        <div id="logView">
+          <pre id="log"></pre>
+        </div>
+
+        <div id="tableView" class="hidden">
+          <div id="intradayWrap" class="hidden">
+            <div id="intradayTable"></div>
+          </div>
+          <div id="tablePlaceholder">Waiting for table data…</div>
+        </div>
+      </div>
+    </main>
+
+  </div>
+</body>
+</html>
