@@ -19,14 +19,15 @@ const server = http.createServer(app);
 // (optional) if you ever open from another device in LAN, add cors here
 const io = new Server(server /*, { cors: { origin: "*" } } */);
 
-const PORT = 3000;
+const PORT = 3001;
 const PUBLIC_DIR = path.join(__dirname, "public");
 
 // ---- track long-running live scanner process ----
 let liveScannerProcess = null;
+const LONG_RUNNING_KEYS = new Set(["live", "live_eod", "paper15_auto"]);
 
 // ---------- PATHS ----------
-const INTRA_DIR = "C:\\Users\\Admin\\nifty_option_bot_fixed";
+const INTRA_DIR = "C:/Users/rahul/OneDrive/Desktop/MyApps/Nifty_Option_bot";
 const INTRA_PYTHON = path.join(INTRA_DIR, ".venv", "Scripts", "python.exe");
 
 const RUN_FULL = path.join(INTRA_DIR, "run_full_workflow.py");
@@ -37,16 +38,15 @@ const BACKTESTER = path.join(INTRA_DIR, "backtester.py");
 const TOMORROW_PRED = path.join(INTRA_DIR, "tomorrow_predictions.py");
 
 const TRADER_VIEW_JSON = path.join(INTRA_DIR, "logs", "live_scanner", "trader_view_latest.json");
+const PAPER15_JSON = path.join(INTRA_DIR, "logs", "live_scanner", "live_15m_paper_latest.json");
 const FIB_ANALYSIS_DIR = path.join(INTRA_DIR, "csv", "eod", "analysis");
 
-// Daily / Weekly strategy bot folder
-const DAILY_DIR = "C:\\Users\\Admin\\WeeklyStrategyBOT";
+const DAILY_DIR = "C:/Users/rahul/OneDrive/Desktop/MyApps/weeklystrategybot";
 const DAILY_PYTHON = path.join(DAILY_DIR, ".venv", "Scripts", "python.exe");
 const DAILY_SCRIPT = path.join(DAILY_DIR, "daily_strategy_bot.py");
 const WEEKLY_SCRIPT = path.join(DAILY_DIR, "weekly_strategy_bot.py");
 
-// Option Selling bot folder
-const OPT_DIR = "C:\\Users\\Admin\\optionsellingbot";
+const OPT_DIR = "C:/Users/rahul/OneDrive/Desktop/MyApps/OptionSellingBot";
 const OPT_PYTHON = path.join(OPT_DIR, ".venv", "Scripts", "python.exe");
 
 // ---------- MIDDLEWARE + STATIC ----------
@@ -72,8 +72,26 @@ const COMMANDS = {
 
   daily_dbg: { title: "Daily Strategy Bot (DEBUG VIEW)", cmd: DAILY_PYTHON, args: [DAILY_SCRIPT, "--debug"], cwd: DAILY_DIR, env: { DEBUG_VIEW: "1" } },
   weekly_dbg: { title: "Weekly Strategy Bot (DEBUG VIEW)", cmd: DAILY_PYTHON, args: [WEEKLY_SCRIPT, "--debug"], cwd: DAILY_DIR, env: { DEBUG_VIEW: "1" } },
+  paper15: {
+    title: "15m Paper Scanner – NIFTY + BANKNIFTY",
+    cmd: INTRA_PYTHON,
+    args: ["-u", LIVE_SCANNER, "--paper15"],
+    cwd: INTRA_DIR,
+  },
 
-  morning: { title: "Option Buying – Full Morning Pipeline", cmd: INTRA_PYTHON, args: [RUN_FULL], cwd: INTRA_DIR },
+  paper15_auto: {
+    title: "AUTO 15m Paper Scanner – NIFTY + BANKNIFTY",
+    cmd: INTRA_PYTHON,
+    args: ["-u", LIVE_SCANNER, "--paper15-auto"],
+    cwd: INTRA_DIR,
+  },
+  morning: {
+  title: "Option Buying – Full Morning Pipeline",
+  cmd: INTRA_PYTHON,
+  args: [RUN_FULL],
+  cwd: INTRA_DIR,
+  env: { RUN_LIVE: "0" },
+},
   universe: { title: "Option Buying – Rebuild LIVE_UNIVERSE Only", cmd: INTRA_PYTHON, args: [BUILD_UNIVERSE], cwd: INTRA_DIR },
 
   eod30: { title: "Option Buying – EOD 30m Report", cmd: INTRA_PYTHON, args: [EOD_REPORT], cwd: INTRA_DIR },
@@ -89,6 +107,9 @@ const COMMANDS = {
 },
 
 };
+
+
+
 
 // ---------- TABLE HELPERS ----------
 
@@ -111,6 +132,34 @@ function readTraderViewRows() {
   }
 }
 
+function readPaper15Rows() {
+  try {
+    if (!fs.existsSync(PAPER15_JSON)) return [];
+    const raw = fs.readFileSync(PAPER15_JSON, "utf8");
+
+    const safe = raw
+      .replace(/\bNaN\b/g, "null")
+      .replace(/\bInfinity\b/g, "null")
+      .replace(/\b-Infinity\b/g, "null");
+
+    const rows = JSON.parse(safe);
+    return Array.isArray(rows) ? rows : [];
+  } catch (e) {
+    io.emit("log", `[WARN] live_15m_paper_latest.json read/parse failed: ${e.message}\n`);
+    return [];
+  }
+}
+
+function emitPaper15Table() {
+  const objRows = readPaper15Rows();
+  if (!objRows.length) return;
+
+  const columns = Object.keys(objRows[0]);
+  const rows = objRows.map((r) => columns.map((c) => (r[c] ?? "")));
+
+  io.emit("table", { name: "paper15", columns, rows });
+}
+
 function emitTraderViewTable() {
   const objRows = readTraderViewRows();
   if (!objRows.length) return;
@@ -131,6 +180,8 @@ function splitLine(line) {
   if (line.includes(",")) return line.split(",").map(s => s.trim());
   return line.split(/\t+|\s{2,}/).map(s => s.trim()).filter(Boolean);
 }
+
+
 
 function parseIntradayPublicBlock(buf) {
   const marker = "=== INTRADAY PUBLIC (LIVE/WATCH) ===";
@@ -165,10 +216,25 @@ function parseIntradayPublicBlock(buf) {
   return { name: "intraday_public", columns: header, rows };
 }
 
+
+
+
 // ---------- MORNING COMBO ----------
 function runMorningCombo() {
-  const step1 = { title: "Option Buying – Full Morning Pipeline", cmd: INTRA_PYTHON, args: [RUN_FULL], cwd: INTRA_DIR };
-  const step2 = { title: "Option Buying – Nifty50 Backtest (Universe)", cmd: INTRA_PYTHON, args: [BACKTESTER], cwd: INTRA_DIR };
+  const step1 = {
+    title: "Option Buying – Full Morning Pipeline",
+    cmd: INTRA_PYTHON,
+    args: [RUN_FULL],
+    cwd: INTRA_DIR,
+    env: { RUN_LIVE: "0" }, // keep morning as prep only
+  };
+
+  const step2 = {
+    title: "Option Buying – Nifty50 Backtest (Universe)",
+    cmd: INTRA_PYTHON,
+    args: [BACKTESTER],
+    cwd: INTRA_DIR,
+  };
 
   function spawnStep(cfg, onDone) {
     const { title, cmd, args, cwd } = cfg;
@@ -183,20 +249,24 @@ function runMorningCombo() {
 
     child.on("error", (err) => {
       io.emit("log", `[ERROR] ${err.message}\n`);
-      onDone && onDone(err);
+      onDone && onDone(err, null);
     });
 
-    child.on("close", (code) => {
-      io.emit("log", `\n=== ${title} finished with exit code ${code} ===\n`);
+    child.on("close", (code, signal) => {
+      io.emit("log", `\n=== ${title} finished with exit code ${code} signal ${signal || "-"} ===\n`);
       onDone && onDone(null, code);
     });
   }
 
-  spawnStep(step1, (err1) => {
-    if (err1) return io.emit("log", "\n[INFO] Morning pipeline failed, skipping backtest summary.\n");
+  spawnStep(step1, (err1, code1) => {
+    if (err1 || code1 !== 0) {
+      return io.emit("log", `\n[INFO] Morning pipeline failed (exit code ${code1}), skipping backtest.\n`);
+    }
 
-    spawnStep(step2, (err2) => {
-      if (err2) return io.emit("log", "\n[INFO] Backtester failed, cannot show top symbols summary.\n");
+    spawnStep(step2, (err2, code2) => {
+      if (err2 || code2 !== 0) {
+        return io.emit("log", `\n[INFO] Backtester failed (exit code ${code2}), cannot show top symbols summary.\n`);
+      }
 
       const summaryPath = path.join(INTRA_DIR, "backtest_summary_nifty50_30m.csv");
       fs.readFile(summaryPath, "utf8", (err, data) => {
@@ -220,8 +290,8 @@ function runCommand(key) {
   const cfg = COMMANDS[key];
   if (!cfg) return io.emit("log", `Unknown command: ${key}\n`);
 
-  if (key === "live" && liveScannerProcess && !liveScannerProcess.killed) {
-    return io.emit("log", "Live scanner is already running.\n");
+  if (LONG_RUNNING_KEYS.has(key) && liveScannerProcess && !liveScannerProcess.killed) {
+  return io.emit("log", "A live scanner is already running.\n");
   }
 
   const { title, cmd, args, cwd } = cfg;
@@ -230,7 +300,7 @@ function runCommand(key) {
   const mergedEnv = { ...process.env, ...(cfg.env || {}) };
   const child = spawn(cmd, args, { cwd, shell: false, env: mergedEnv });
 
-  if (key === "live") liveScannerProcess = child;
+  if (LONG_RUNNING_KEYS.has(key)) liveScannerProcess = child;
 
   
 child.stdout.on("data", (data) => {
@@ -241,14 +311,14 @@ child.stdout.on("data", (data) => {
   child.stderr.on("data", (data) => io.emit("log", `[STDERR] ${data.toString()}`));
 
   child.on("error", (err) => {
-    io.emit("log", `[ERROR] ${err.message}\n`);
-    if (key === "live") liveScannerProcess = null;
-  });
+  io.emit("log", `[ERROR] ${err.message}\n`);
+  if (LONG_RUNNING_KEYS.has(key)) liveScannerProcess = null;
+});
 
-  child.on("close", (code) => {
-    io.emit("log", `\n=== ${title} finished with exit code ${code} ===\n`);
-    if (key === "live") liveScannerProcess = null;
-  });
+child.on("close", (code, signal) => {
+  io.emit("log", `\n=== ${title} finished with exit code ${code} signal ${signal || "-"} ===\n`);
+  if (LONG_RUNNING_KEYS.has(key)) liveScannerProcess = null;
+});
 }
 
 // ---------- ROUTES ----------
@@ -300,6 +370,19 @@ setInterval(() => {
   } catch (_) {}
 }, 1000);
 
+let lastPaper15MtimeMs = 0;
+
+setInterval(() => {
+  try {
+    if (!fs.existsSync(PAPER15_JSON)) return;
+    const st = fs.statSync(PAPER15_JSON);
+    if (st.mtimeMs > lastPaper15MtimeMs) {
+      lastPaper15MtimeMs = st.mtimeMs;
+      emitPaper15Table();
+    }
+  } catch (_) {}
+}, 1000);
+
 // ---------- SOCKET ----------
 io.on("connection", (socket) => {
   socket.emit("log", "[INFO] Socket connected.\n");
@@ -312,6 +395,13 @@ io.on("connection", (socket) => {
     socket.emit("table", { name: "intraday_public", columns, rows });
   }
 });
+
+  const paperRows = readPaper15Rows();
+  if (paperRows.length) {
+    const columns = Object.keys(paperRows[0]);
+    const rows = paperRows.map((r) => columns.map((c) => (r[c] ?? "")));
+    io.emit("table", { name: "paper15", columns, rows });
+  }
 
 // ---------- START ----------
 server.listen(PORT, () => {

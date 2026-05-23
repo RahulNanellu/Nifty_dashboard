@@ -236,6 +236,13 @@ pre { margin: 0; }
       <div class="groupTitle">Intraday</div>
       <button class="cmdBtn primary" data-cmd="live">Start Live Scanner</button>
       <button class="cmdBtn danger" id="btnStopLive">Stop Live Scanner</button>
+      <button class="cmdBtn primary" data-cmd="paper15_auto">
+        Auto: 15m NIFTY / BANKNIFTY Paper Scan
+      </button>
+
+      <button class="cmdBtn primary" data-cmd="paper15">
+        Run: 15m NIFTY / BANKNIFTY Paper Scan
+      </button>
 
       <div class="groupTitle">Option Selling</div>
       <button class="cmdBtn" data-cmd="opt_off">Run: Option Selling OFFLINE</button>
@@ -259,6 +266,8 @@ pre { margin: 0; }
 
         <button id="btnClearLog" class="btn">Clear Log</button>
         <button id="btnClearTable" class="btn">Clear Table</button>
+        <button id="btnWakeLock" class="btn">Stay Awake</button>
+
 
         <div id="status">Idle.</div>
       </div>
