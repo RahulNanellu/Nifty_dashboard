@@ -362,6 +362,12 @@
 
     const colsKey = cols.join("|");
 
+    if (intradayTab && colsKey !== lastColsKey) {
+      intradayTab.destroy();
+      intradayTab = null;
+      lastColsKey = "";
+    }
+
     intradayWrap.classList.remove("hidden");
     tablePlaceholder.classList.add("hidden");
 
@@ -401,7 +407,7 @@
 
       persistence: true,
       persistenceMode: "local",
-      persistenceID: `${currentTableName}_table_v1`,
+      persistenceID: `${currentTableName}_table_v2`,
 
       data,
       columns: colDefs,
