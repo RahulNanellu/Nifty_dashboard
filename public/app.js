@@ -334,15 +334,32 @@
     });
 
     const colDefs = cols.map((c) => {
-    const is15m = String(c).startsWith("15m ");
+    const colName = String(c);
+    const is15m = colName.startsWith("15m ");
+    const isNumeric =
+      colName.includes("Score") ||
+      colName.includes("ADX") ||
+      colName.includes("Gap1") ||
+      colName.includes("ST%");
 
     return {
       title: c,
       field: c,
       headerSort: true,
       cssClass: is15m ? "col-15m" : "",
+      formatter: (cell) => {
+        const value = cell.getValue();
+
+        if (isNumeric) {
+          const n = Number(value);
+          if (Number.isFinite(n)) return n.toFixed(2);
+        }
+
+        return value ?? "";
+      },
     };
   });
+
     const colsKey = cols.join("|");
 
     intradayWrap.classList.remove("hidden");
@@ -356,20 +373,42 @@
 
     currentTableName = payload.name || "intraday_public";
     if (!intradayTab) {
+      
       intradayTab = new Tabulator("#intradayTable", {
-        height: "600px",
-        layout: "fitDataFill",
-        responsiveLayout: false,
-        columnMinWidth: 90,
+      height: "600px",
+      layout: "fitDataFill",
+      responsiveLayout: false,
+      columnMinWidth: 90,
 
-        persistence: true,
-        persistenceMode: "local",
-        persistenceID: `${currentTableName}_table_v1`,
+      rowFormatter: function(row) {
+        const data = row.getData();
 
-        data,
-        columns: colDefs,
-        placeholder: "No rows",
-      });
+        const d1 = data["1D Decision"];
+        const d15 = data["15m Decision"];
+
+        let bg = "";
+
+        if (d1 === "BUY" && d15 === "BUY") {
+          bg = "rgba(34, 197, 94, 0.28)";
+        } else if (d1 === "SELL" && d15 === "SELL") {
+          bg = "rgba(239, 68, 68, 0.28)";
+        }
+
+        row.getCells().forEach((cell) => {
+          cell.getElement().style.backgroundColor = bg;
+        });
+      },
+
+      persistence: true,
+      persistenceMode: "local",
+      persistenceID: `${currentTableName}_table_v1`,
+
+      data,
+      columns: colDefs,
+      placeholder: "No rows",
+    });
+
+      
       lastColsKey = colsKey;
     } else {
       if (colsKey !== lastColsKey) {
