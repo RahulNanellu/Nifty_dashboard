@@ -259,13 +259,12 @@
   socket.on("table", (payload) => {
   if (!payload) return;
 
-  const allowedTables = new Set(["intraday_public", "paper15"]);
+  const allowedTables = new Set(["intraday_public", "paper15", "daily15align"]);
 
   if (!allowedTables.has(payload.name)) return;
 
   lastTablePayload = payload;
-  currentTableName = payload.name || "intraday_public";
-  setStatus(`Table updated: ${currentTableName}`);
+  setStatus(`Table updated: ${payload.name}`);
 
   console.log("TABLE payload:", {
     name: payload?.name,
@@ -334,17 +333,28 @@
       return obj;
     });
 
-    const colDefs = cols.map((c) => ({
+    const colDefs = cols.map((c) => {
+    const is15m = String(c).startsWith("15m ");
+
+    return {
       title: c,
       field: c,
       headerSort: true,
-    }));
-
+      cssClass: is15m ? "col-15m" : "",
+    };
+  });
     const colsKey = cols.join("|");
 
     intradayWrap.classList.remove("hidden");
     tablePlaceholder.classList.add("hidden");
 
+    if (payload.name !== currentTableName && intradayTab) {
+      intradayTab.destroy();
+      intradayTab = null;
+      lastColsKey = "";
+    }
+
+    currentTableName = payload.name || "intraday_public";
     if (!intradayTab) {
       intradayTab = new Tabulator("#intradayTable", {
         height: "600px",
@@ -380,4 +390,23 @@
     const params = new URLSearchParams(window.location.search);
   setView((params.get("view") || "").toLowerCase() === "table" ? "table" : "log");
   updateWakeButton();
+
+
+  const autoDaily15Align = document.getElementById("autoDaily15Align");
+
+setInterval(() => {
+  if (!autoDaily15Align || !autoDaily15Align.checked) return;
+
+  const now = new Date();
+  const mins = now.getHours() * 60 + now.getMinutes();
+
+  // 09:15 to 15:30
+  if (mins < 555 || mins > 930) return;
+
+  // run only on 15-min marks
+  if (now.getMinutes() % 15 === 0) {
+    runCmd("daily15align");
+  }
+}, 60 * 1000);
+
 })();

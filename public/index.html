@@ -211,6 +211,14 @@
 /* Remove default pre margin (can create odd light gaps) */
 pre { margin: 0; }
 
+.tabulator .tabulator-cell.col-15m {
+  color: #93c5fd !important;
+  font-weight: 600;
+}
+
+.tabulator .tabulator-col[tabulator-field^="15m"] .tabulator-col-title {
+  color: #93c5fd !important;
+}
 
 </style>
 
@@ -225,6 +233,11 @@ pre { margin: 0; }
 
       <div class="groupTitle">Daily / Weekly</div>
       <button class="cmdBtn" data-cmd="daily">Run: Daily Strategy Bot</button>
+      <button class="cmdBtn" data-cmd="daily15align">Run: Daily + 15m Alignment</button>
+      <label style="display:block; color:#9ca3af; font-size:12px; margin:4px 0 10px 8px;">
+      <input type="checkbox" id="autoDaily15Align">
+        Auto every 15 min
+      </label>
       <button class="cmdBtn" data-cmd="weekly">Run: Weekly Strategy Bot</button>
       <button class="cmdBtn" data-cmd="tomorrow">Run: Tomorrow Predictions</button>
 

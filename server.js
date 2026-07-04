@@ -1,5 +1,4 @@
 // server.js
-//
 // Nifty Bot Dashboard V2
 
 const express = require("express");
@@ -15,19 +14,13 @@ console.log(">>> NIFTY DASHBOARD V2 WITH OPTION BUYING + TOMORROW PREDICTIONS <<
 
 const app = express();
 const server = http.createServer(app);
-
-// (optional) if you ever open from another device in LAN, add cors here
-const io = new Server(server /*, { cors: { origin: "*" } } */);
+const io = new Server(server);
 
 const PORT = 3001;
 const PUBLIC_DIR = path.join(__dirname, "public");
 
-// ---- track long-running live scanner process ----
-let liveScannerProcess = null;
-const LONG_RUNNING_KEYS = new Set(["live", "live_eod", "paper15_auto"]);
-
 // ---------- PATHS ----------
-const INTRA_DIR = "C:/Users/rahul/OneDrive/Desktop/MyApps/Nifty_Option_bot";
+const INTRA_DIR = "C:/Rahul_Local/Desktop/MyApps/Nifty_Option_bot";
 const INTRA_PYTHON = path.join(INTRA_DIR, ".venv", "Scripts", "python.exe");
 
 const RUN_FULL = path.join(INTRA_DIR, "run_full_workflow.py");
@@ -41,37 +34,110 @@ const TRADER_VIEW_JSON = path.join(INTRA_DIR, "logs", "live_scanner", "trader_vi
 const PAPER15_JSON = path.join(INTRA_DIR, "logs", "live_scanner", "live_15m_paper_latest.json");
 const FIB_ANALYSIS_DIR = path.join(INTRA_DIR, "csv", "eod", "analysis");
 
-const DAILY_DIR = "C:/Users/rahul/OneDrive/Desktop/MyApps/weeklystrategybot";
+const DAILY_DIR = "C:/Rahul_Local/Desktop/MyApps/weeklystrategybot";
 const DAILY_PYTHON = path.join(DAILY_DIR, ".venv", "Scripts", "python.exe");
 const DAILY_SCRIPT = path.join(DAILY_DIR, "daily_strategy_bot.py");
 const WEEKLY_SCRIPT = path.join(DAILY_DIR, "weekly_strategy_bot.py");
+const DAILY15_ALIGN_SCRIPT = path.join(DAILY_DIR, "daily_15m_alignment_bot.py");
+const DAILY15_ALIGN_JSON = path.join(DAILY_DIR, "logs", "daily_15m_alignment_latest.json");
 
-const OPT_DIR = "C:/Users/rahul/OneDrive/Desktop/MyApps/OptionSellingBot";
+const OPT_DIR = "C:/Rahul_Local/Desktop/MyApps/OptionSellingBot";
 const OPT_PYTHON = path.join(OPT_DIR, ".venv", "Scripts", "python.exe");
 
-// ---------- MIDDLEWARE + STATIC ----------
+let liveScannerProcess = null;
+const LONG_RUNNING_KEYS = new Set(["live", "live_eod", "paper15_auto"]);
+
+// ---------- MIDDLEWARE ----------
 app.use(express.json());
-
-// serve fib reports
 app.use("/fib-reports", express.static(FIB_ANALYSIS_DIR));
-
-// serve UI (index.html, app.js, vendor files)
 app.use(express.static(PUBLIC_DIR));
 
-// explicit home route (optional, but nice)
 app.get("/", (req, res) => res.sendFile(path.join(PUBLIC_DIR, "index.html")));
-
-// ping
 app.get("/ping", (req, res) => res.send("pong"));
 
-// ---------- COMMAND DEFINITIONS ----------
+// ---------- COMMANDS ----------
 const COMMANDS = {
-  daily: { title: "Daily Strategy Bot", cmd: DAILY_PYTHON, args: [DAILY_SCRIPT], cwd: DAILY_DIR },
-  weekly: { title: "Weekly Strategy Bot", cmd: DAILY_PYTHON, args: [WEEKLY_SCRIPT], cwd: DAILY_DIR },
-  tomorrow: { title: "Tomorrow Predictions (Next Morning Focus)", cmd: INTRA_PYTHON, args: [TOMORROW_PRED], cwd: INTRA_DIR },
+  daily: {
+    title: "Daily Strategy Bot",
+    cmd: DAILY_PYTHON,
+    args: [DAILY_SCRIPT],
+    cwd: DAILY_DIR,
+  },
 
-  daily_dbg: { title: "Daily Strategy Bot (DEBUG VIEW)", cmd: DAILY_PYTHON, args: [DAILY_SCRIPT, "--debug"], cwd: DAILY_DIR, env: { DEBUG_VIEW: "1" } },
-  weekly_dbg: { title: "Weekly Strategy Bot (DEBUG VIEW)", cmd: DAILY_PYTHON, args: [WEEKLY_SCRIPT, "--debug"], cwd: DAILY_DIR, env: { DEBUG_VIEW: "1" } },
+  daily15align: {
+    title: "Daily + 15m Alignment",
+    cmd: DAILY_PYTHON,
+    args: [DAILY15_ALIGN_SCRIPT],
+    cwd: DAILY_DIR,
+  },
+
+  weekly: {
+    title: "Weekly Strategy Bot",
+    cmd: DAILY_PYTHON,
+    args: [WEEKLY_SCRIPT],
+    cwd: DAILY_DIR,
+  },
+
+  tomorrow: {
+    title: "Tomorrow Predictions (Next Morning Focus)",
+    cmd: INTRA_PYTHON,
+    args: [TOMORROW_PRED],
+    cwd: INTRA_DIR,
+  },
+
+  daily_dbg: {
+    title: "Daily Strategy Bot (DEBUG VIEW)",
+    cmd: DAILY_PYTHON,
+    args: [DAILY_SCRIPT, "--debug"],
+    cwd: DAILY_DIR,
+    env: { DEBUG_VIEW: "1" },
+  },
+
+  weekly_dbg: {
+    title: "Weekly Strategy Bot (DEBUG VIEW)",
+    cmd: DAILY_PYTHON,
+    args: [WEEKLY_SCRIPT, "--debug"],
+    cwd: DAILY_DIR,
+    env: { DEBUG_VIEW: "1" },
+  },
+
+  morning: {
+    title: "Option Buying – Full Morning Pipeline",
+    cmd: INTRA_PYTHON,
+    args: [RUN_FULL],
+    cwd: INTRA_DIR,
+    env: { RUN_LIVE: "0" },
+  },
+
+  universe: {
+    title: "Option Buying – Rebuild LIVE_UNIVERSE Only",
+    cmd: INTRA_PYTHON,
+    args: [BUILD_UNIVERSE],
+    cwd: INTRA_DIR,
+  },
+
+  eod30: {
+    title: "Option Buying – EOD 30m Report",
+    cmd: INTRA_PYTHON,
+    args: [EOD_REPORT],
+    cwd: INTRA_DIR,
+  },
+
+  live: {
+    title: "Option Buying – Start Live Scanner",
+    cmd: INTRA_PYTHON,
+    args: ["-u", LIVE_SCANNER],
+    cwd: INTRA_DIR,
+  },
+
+  live_eod: {
+    title: "Live Scanner (EOD Parity: ST3 + EMA50 only)",
+    cmd: INTRA_PYTHON,
+    args: ["-u", LIVE_SCANNER],
+    cwd: INTRA_DIR,
+    env: { LIVE_MODE: "EOD_PARITY" },
+  },
+
   paper15: {
     title: "15m Paper Scanner – NIFTY + BANKNIFTY",
     cmd: INTRA_PYTHON,
@@ -85,40 +151,21 @@ const COMMANDS = {
     args: ["-u", LIVE_SCANNER, "--paper15-auto"],
     cwd: INTRA_DIR,
   },
-  morning: {
-  title: "Option Buying – Full Morning Pipeline",
-  cmd: INTRA_PYTHON,
-  args: [RUN_FULL],
-  cwd: INTRA_DIR,
-  env: { RUN_LIVE: "0" },
-},
-  universe: { title: "Option Buying – Rebuild LIVE_UNIVERSE Only", cmd: INTRA_PYTHON, args: [BUILD_UNIVERSE], cwd: INTRA_DIR },
 
-  eod30: { title: "Option Buying – EOD 30m Report", cmd: INTRA_PYTHON, args: [EOD_REPORT], cwd: INTRA_DIR },
-  live: { title: "Option Buying – Start Live Scanner (Standalone)", cmd: INTRA_PYTHON, args: ["-u", LIVE_SCANNER], cwd: INTRA_DIR },
-
-  opt_off: { title: "Option Selling Bot (Once, OFFLINE)", cmd: OPT_PYTHON, args: ["-m", "backend.main", "--once", "--offline"], cwd: OPT_DIR },
-  live_eod: {
-  title: "Live Scanner (EOD Parity: ST3 + EMA50 only)",
-  cmd: INTRA_PYTHON,
-  args: ["-u", LIVE_SCANNER],
-  cwd: INTRA_DIR,
-  env: { LIVE_MODE: "EOD_PARITY" },
-},
-
+  opt_off: {
+    title: "Option Selling Bot (Once, OFFLINE)",
+    cmd: OPT_PYTHON,
+    args: ["-m", "backend.main", "--once", "--offline"],
+    cwd: OPT_DIR,
+  },
 };
 
-
-
-
-// ---------- TABLE HELPERS ----------
-
-function readTraderViewRows() {
+// ---------- JSON TABLE HELPERS ----------
+function safeReadJsonArray(filePath, label) {
   try {
-    if (!fs.existsSync(TRADER_VIEW_JSON)) return [];
-    const raw = fs.readFileSync(TRADER_VIEW_JSON, "utf8");
+    if (!fs.existsSync(filePath)) return [];
 
-    // JSON.parse cannot handle NaN/Infinity. Convert them to null.
+    const raw = fs.readFileSync(filePath, "utf8");
     const safe = raw
       .replace(/\bNaN\b/g, "null")
       .replace(/\bInfinity\b/g, "null")
@@ -127,97 +174,48 @@ function readTraderViewRows() {
     const rows = JSON.parse(safe);
     return Array.isArray(rows) ? rows : [];
   } catch (e) {
-    io.emit("log", `[WARN] trader_view_latest.json read/parse failed: ${e.message}\n`);
+    io.emit("log", `[WARN] ${label} read failed: ${e.message}\n`);
     return [];
   }
+}
+
+function emitRowsTable(name, objRows, socket = null) {
+  if (!objRows || !objRows.length) return;
+
+  const columns = Object.keys(objRows[0]);
+  const rows = objRows.map((r) => columns.map((c) => r[c] ?? ""));
+
+  const payload = { name, columns, rows };
+
+  if (socket) socket.emit("table", payload);
+  else io.emit("table", payload);
+}
+
+function readTraderViewRows() {
+  return safeReadJsonArray(TRADER_VIEW_JSON, "trader_view_latest.json");
 }
 
 function readPaper15Rows() {
-  try {
-    if (!fs.existsSync(PAPER15_JSON)) return [];
-    const raw = fs.readFileSync(PAPER15_JSON, "utf8");
-
-    const safe = raw
-      .replace(/\bNaN\b/g, "null")
-      .replace(/\bInfinity\b/g, "null")
-      .replace(/\b-Infinity\b/g, "null");
-
-    const rows = JSON.parse(safe);
-    return Array.isArray(rows) ? rows : [];
-  } catch (e) {
-    io.emit("log", `[WARN] live_15m_paper_latest.json read/parse failed: ${e.message}\n`);
-    return [];
-  }
+  return safeReadJsonArray(PAPER15_JSON, "live_15m_paper_latest.json");
 }
 
-function emitPaper15Table() {
-  const objRows = readPaper15Rows();
-  if (!objRows.length) return;
-
-  const columns = Object.keys(objRows[0]);
-  const rows = objRows.map((r) => columns.map((c) => (r[c] ?? "")));
-
-  io.emit("table", { name: "paper15", columns, rows });
+function readDaily15AlignRows() {
+  return safeReadJsonArray(DAILY15_ALIGN_JSON, "daily_15m_alignment_latest.json");
 }
 
 function emitTraderViewTable() {
-  const objRows = readTraderViewRows();
-  if (!objRows.length) return;
-
-  const columns = Object.keys(objRows[0]);
-  const rows = objRows.map((r) => columns.map((c) => (r[c] ?? "")));
-  io.emit("table", { name: "intraday_public", columns, rows });
+  emitRowsTable("intraday_public", readTraderViewRows());
 }
 
-// If your Python prints a marker block, this parses it.
-// Marker format assumption:
-// === INTRADAY PUBLIC (LIVE/WATCH) ===
-// col1 | col2 | col3
-// v1   | v2   | v3
-function splitLine(line) {
-  if (!line) return [];
-  if (line.includes("|")) return line.split("|").map(s => s.trim()).filter(Boolean);
-  if (line.includes(",")) return line.split(",").map(s => s.trim());
-  return line.split(/\t+|\s{2,}/).map(s => s.trim()).filter(Boolean);
+function emitPaper15Table() {
+  emitRowsTable("paper15", readPaper15Rows());
 }
 
-
-
-function parseIntradayPublicBlock(buf) {
-  const marker = "=== INTRADAY PUBLIC (LIVE/WATCH) ===";
-  const idx = buf.lastIndexOf(marker);
-  if (idx === -1) return null;
-
-  const tail = buf.slice(idx + marker.length);
-  const rawLines = tail.split(/\r?\n/).map(l => l.trim());
-
-  // remove blanks at top
-  while (rawLines.length && !rawLines[0]) rawLines.shift();
-
-  if (rawLines.length < 2) return null;
-
-  const header = splitLine(rawLines[0]);
-  if (!header.length) return null;
-
-  const rows = [];
-  for (let i = 1; i < rawLines.length; i++) {
-    const line = rawLines[i];
-    if (!line) continue;
-    if (line.startsWith("===")) break;
-
-    const cols = splitLine(line);
-    if (!cols.length) continue;
-
-    const row = header.map((_, j) => cols[j] ?? "");
-    rows.push(row);
-  }
-
-  if (!rows.length) return null;
-  return { name: "intraday_public", columns: header, rows };
+function emitDaily15AlignTable() {
+  const rows = readDaily15AlignRows();
+  io.emit("log", `[DEBUG] daily15align rows=${rows.length}\n`);
+  emitRowsTable("daily15align", rows);
 }
-
-
-
 
 // ---------- MORNING COMBO ----------
 function runMorningCombo() {
@@ -226,7 +224,7 @@ function runMorningCombo() {
     cmd: INTRA_PYTHON,
     args: [RUN_FULL],
     cwd: INTRA_DIR,
-    env: { RUN_LIVE: "0" }, // keep morning as prep only
+    env: { RUN_LIVE: "0" },
   };
 
   const step2 = {
@@ -260,24 +258,35 @@ function runMorningCombo() {
 
   spawnStep(step1, (err1, code1) => {
     if (err1 || code1 !== 0) {
-      return io.emit("log", `\n[INFO] Morning pipeline failed (exit code ${code1}), skipping backtest.\n`);
+      io.emit("log", `\n[INFO] Morning pipeline failed, skipping backtest.\n`);
+      return;
     }
 
     spawnStep(step2, (err2, code2) => {
       if (err2 || code2 !== 0) {
-        return io.emit("log", `\n[INFO] Backtester failed (exit code ${code2}), cannot show top symbols summary.\n`);
+        io.emit("log", `\n[INFO] Backtester failed.\n`);
+        return;
       }
 
       const summaryPath = path.join(INTRA_DIR, "backtest_summary_nifty50_30m.csv");
+
       fs.readFile(summaryPath, "utf8", (err, data) => {
-        if (err) return io.emit("log", `\n[INFO] Could not read backtest summary CSV: ${err.message}\n`);
+        if (err) {
+          io.emit("log", `\n[INFO] Could not read backtest summary CSV: ${err.message}\n`);
+          return;
+        }
 
         const lines = data.trim().split(/\r?\n/);
-        if (lines.length <= 1) return io.emit("log", "\n[INFO] Backtest summary CSV has no rows to display.\n");
+        if (lines.length <= 1) {
+          io.emit("log", "\n[INFO] Backtest summary CSV has no rows.\n");
+          return;
+        }
 
         io.emit("log", "\n=== TODAY'S TOP OPTION-BUY CANDIDATES (by avg_R) ===\n");
         const maxRows = Math.min(15, lines.length - 1);
-        for (let i = 1; i <= maxRows; i++) io.emit("log", lines[i] + "\n");
+        for (let i = 1; i <= maxRows; i++) {
+          io.emit("log", lines[i] + "\n");
+        }
       });
     });
   });
@@ -285,16 +294,24 @@ function runMorningCombo() {
 
 // ---------- RUNNER ----------
 function runCommand(key) {
-  if (key === "morning") return runMorningCombo();
+  if (key === "morning") {
+    runMorningCombo();
+    return;
+  }
 
   const cfg = COMMANDS[key];
-  if (!cfg) return io.emit("log", `Unknown command: ${key}\n`);
+  if (!cfg) {
+    io.emit("log", `Unknown command: ${key}\n`);
+    return;
+  }
 
   if (LONG_RUNNING_KEYS.has(key) && liveScannerProcess && !liveScannerProcess.killed) {
-  return io.emit("log", "A live scanner is already running.\n");
+    io.emit("log", "A live scanner is already running.\n");
+    return;
   }
 
   const { title, cmd, args, cwd } = cfg;
+
   io.emit("log", `\n=== ${title} ===\nCWD : ${cwd}\nCMD : ${cmd} ${args.join(" ")}\n`);
 
   const mergedEnv = { ...process.env, ...(cfg.env || {}) };
@@ -302,35 +319,44 @@ function runCommand(key) {
 
   if (LONG_RUNNING_KEYS.has(key)) liveScannerProcess = child;
 
-  
-child.stdout.on("data", (data) => {
-    const chunk = data.toString();
-    io.emit("log", chunk);
-  });
-
+  child.stdout.on("data", (data) => io.emit("log", data.toString()));
   child.stderr.on("data", (data) => io.emit("log", `[STDERR] ${data.toString()}`));
 
   child.on("error", (err) => {
-  io.emit("log", `[ERROR] ${err.message}\n`);
-  if (LONG_RUNNING_KEYS.has(key)) liveScannerProcess = null;
-});
+    io.emit("log", `[ERROR] ${err.message}\n`);
+    if (LONG_RUNNING_KEYS.has(key)) liveScannerProcess = null;
+  });
 
-child.on("close", (code, signal) => {
-  io.emit("log", `\n=== ${title} finished with exit code ${code} signal ${signal || "-"} ===\n`);
-  if (LONG_RUNNING_KEYS.has(key)) liveScannerProcess = null;
-});
+  child.on("close", (code, signal) => {
+    io.emit("log", `\n=== ${title} finished with exit code ${code} signal ${signal || "-"} ===\n`);
+
+    if (key === "daily15align") {
+      io.emit("log", "[DEBUG] emitting daily15align table...\n");
+      emitDaily15AlignTable();
+    }
+
+    if (LONG_RUNNING_KEYS.has(key)) liveScannerProcess = null;
+  });
 }
 
 // ---------- ROUTES ----------
 app.post("/run/stop_live", (req, res) => {
   if (liveScannerProcess && !liveScannerProcess.killed) {
     io.emit("log", "\nStopping live scanner...\n");
-    try { liveScannerProcess.kill(); } catch (e) { io.emit("log", `[ERROR] Failed to kill live scanner: ${e.message}\n`); }
+
+    try {
+      liveScannerProcess.kill();
+    } catch (e) {
+      io.emit("log", `[ERROR] Failed to kill live scanner: ${e.message}\n`);
+    }
+
     liveScannerProcess = null;
-    return res.json({ ok: true, stopped: true });
+    res.json({ ok: true, stopped: true });
+    return;
   }
+
   io.emit("log", "No live scanner process running.\n");
-  return res.json({ ok: true, stopped: false });
+  res.json({ ok: true, stopped: false });
 });
 
 app.post("/run/:cmd", (req, res) => {
@@ -349,6 +375,7 @@ app.post("/run/option_live", (req, res) => {
   io.emit("log", `\n=== Option Selling Bot (Once, LIVE via dashboard) ===\nCWD : ${OPT_DIR}\nCMD : ${OPT_PYTHON} ${args.join(" ")}\n`);
 
   const child = spawn(OPT_PYTHON, args, { cwd: OPT_DIR, shell: false });
+
   child.stdout.on("data", (data) => io.emit("log", data.toString()));
   child.stderr.on("data", (data) => io.emit("log", `[STDERR] ${data.toString()}`));
   child.on("close", (code) => io.emit("log", `\n=== Option Selling Bot finished with exit code ${code} ===\n`));
@@ -356,9 +383,8 @@ app.post("/run/option_live", (req, res) => {
   res.json({ ok: true, ticker, fut });
 });
 
-// ---------- FILE WATCH (JSON -> table emit) ----------
+// ---------- FILE WATCH ----------
 let lastTraderMtimeMs = 0;
-
 setInterval(() => {
   try {
     if (!fs.existsSync(TRADER_VIEW_JSON)) return;
@@ -371,7 +397,6 @@ setInterval(() => {
 }, 1000);
 
 let lastPaper15MtimeMs = 0;
-
 setInterval(() => {
   try {
     if (!fs.existsSync(PAPER15_JSON)) return;
@@ -387,21 +412,15 @@ setInterval(() => {
 io.on("connection", (socket) => {
   socket.emit("log", "[INFO] Socket connected.\n");
 
-  // send latest JSON table immediately if present
-  const objRows = readTraderViewRows();
-  if (objRows.length) {
-    const columns = Object.keys(objRows[0]);
-    const rows = objRows.map((r) => columns.map((c) => (r[c] ?? "")));
-    socket.emit("table", { name: "intraday_public", columns, rows });
-  }
-});
+  const traderRows = readTraderViewRows();
+  if (traderRows.length) emitRowsTable("intraday_public", traderRows, socket);
 
   const paperRows = readPaper15Rows();
-  if (paperRows.length) {
-    const columns = Object.keys(paperRows[0]);
-    const rows = paperRows.map((r) => columns.map((c) => (r[c] ?? "")));
-    io.emit("table", { name: "paper15", columns, rows });
-  }
+  if (paperRows.length) emitRowsTable("paper15", paperRows, socket);
+
+  const alignRows = readDaily15AlignRows();
+  if (alignRows.length) emitRowsTable("daily15align", alignRows, socket);
+});
 
 // ---------- START ----------
 server.listen(PORT, () => {
