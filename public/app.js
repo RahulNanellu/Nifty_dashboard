@@ -386,17 +386,23 @@
       responsiveLayout: false,
       columnMinWidth: 90,
 
+      initialSort: [
+       
+        { column: "15m Gap1", dir: "desc" },
+        { column: "1D Gap1", dir: "desc" },
+      ],
+
       rowFormatter: function(row) {
         const data = row.getData();
 
-        const d1 = data["1D Decision"];
-        const d15 = data["15m Decision"];
+        const d1 = data["1D Vol Signal"];
+        const d15 = data["15m Vol Signal"];
 
         let bg = "";
 
-        if (d1 === "BUY" && d15 === "BUY") {
+        if (d1 === "VOL_UP" && d15 === "VOL_UP") {
           bg = "rgba(34, 197, 94, 0.28)";
-        } else if (d1 === "SELL" && d15 === "SELL") {
+        } else if (d1 === "VOL_DOWN" && d15 === "VOL_DOWN") {
           bg = "rgba(239, 68, 68, 0.28)";
         }
 
@@ -405,9 +411,12 @@
         });
       },
 
-      persistence: true,
+      persistence: {
+        columns: true,
+        sort: false,
+      },
       persistenceMode: "local",
-      persistenceID: `${currentTableName}_table_v2`,
+      persistenceID: `${currentTableName}_table_v4`,
 
       data,
       columns: colDefs,
@@ -439,6 +448,10 @@
 
   const autoDaily15Align = document.getElementById("autoDaily15Align");
 
+
+
+let lastAutoDaily15Key = "";
+
 setInterval(() => {
   if (!autoDaily15Align || !autoDaily15Align.checked) return;
 
@@ -449,9 +462,14 @@ setInterval(() => {
   if (mins < 555 || mins > 930) return;
 
   // run only on 15-min marks
-  if (now.getMinutes() % 15 === 0) {
-    runCmd("daily15align");
-  }
+  if (now.getMinutes() % 15 !== 0) return;
+
+  const runKey = `${now.getFullYear()}-${now.getMonth()}-${now.getDate()}-${now.getHours()}-${now.getMinutes()}`;
+
+  if (runKey === lastAutoDaily15Key) return;
+  lastAutoDaily15Key = runKey;
+
+  runCmd("daily15align");
 }, 60 * 1000);
 
 })();
